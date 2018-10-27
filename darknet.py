@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import variable
 import numpy
 import pprint
-
+from tensorboardX import SummaryWriter
 
 class EmptyLayer(nn.Module):
     def __init__(self):
@@ -27,7 +27,7 @@ class DarkNet(nn.Module):
         self.blocks = parse_cfg(cfgfile)
         self.net_info,self.module_list = create_modules(self.blocks)
 
-    def forward(self, x,cuda):
+    def forward(self, x):
         modules = self.blocks[1:]
         outputs = {}
         write = 0
@@ -36,6 +36,7 @@ class DarkNet(nn.Module):
             module_type = (module['type'])
 
             if module_type == 'convolutional' or module_type == 'upsample':
+
                 x = self.module_list[i](x)
 
             elif module_type == 'route':
@@ -72,6 +73,7 @@ class DarkNet(nn.Module):
                 num_classes = int (module['classes'])
 
                 x = x.data
+                cuda = torch.cuda.is_available()
                 x = predict_transform(x,inp_dim,anchors,num_classes,cuda)
                 if not write:
                     detections = x
@@ -83,6 +85,75 @@ class DarkNet(nn.Module):
             outputs[i] = x
 
         return detections
+
+    def load_weights(self,weightfile):
+
+        fp = open(weightfile,'rb')
+        header = np.fromfile(fp,dtype=np.int32,count = 5)
+        self.header = torch.Tensor(header)
+        self.seen = self.header[3]
+        weights = np.fromfile(fp,dtype=np.float32)
+
+        ptr = 0
+        for i in range(len(self.module_list)):
+            module_type = self.blocks[i+1]['type']
+
+            #if type is convlutional,then load the weights
+            #otherwise ignore
+            if module_type =='convolutional':
+                model = self.module_list[i]
+                try:
+                    batch_normalize = int(self.blocks[i+1]['batch_normalize'])
+                except:
+                    batch_normalize = 0
+                conv = model[0]
+
+                if batch_normalize:
+                    bn = model[1]
+
+                    num_bn_biases = bn.bias.numel()
+                    bn_biases = torch.Tensor(weights[ptr:ptr+num_bn_biases])
+                    ptr += num_bn_biases
+
+                    bn_weights = torch.Tensor(weights[ptr:ptr+num_bn_biases])
+                    ptr += num_bn_biases
+
+                    bn_running_mean = torch.Tensor(weights[ptr:ptr + num_bn_biases])
+                    ptr += num_bn_biases
+
+                    bn_running_var = torch.Tensor(weights[ptr:ptr + num_bn_biases])
+                    ptr += num_bn_biases
+
+                    #cast the loaded weights into dims of model weights
+                    bn_biases = bn_biases.view_as(bn.bias.data)
+                    bn_weights = bn_weights.view_as(bn.weight.data)
+                    bn_running_mean = bn_running_mean.view_as(bn.running_mean)
+                    bn_running_var = bn_running_var.view_as(bn.running_var)
+
+                    #copy the data to model
+                    bn.bias.data.copy_(bn_biases)
+                    bn.weights.data.copy_(bn_weights)
+                    bn.running_mean.copy_(bn_running_mean)
+                    bn.running_var.copy_(bn_running_var)
+
+                else:
+                    num_bn_biases = conv.bias.numel()
+                    conv_biases = torch.Tensor(weights[ptr:ptr+num_bn_biases])
+                    ptr += num_bn_biases
+
+                    conv_biases = conv_biases.view_as(conv.bias.dta)
+                    conv.bias.data.copy(conv_biases)
+
+                num_weights = conv.weights.numel()
+                conv_weights = torch.Tensor(weights[ptr:ptr+num_weights])
+                prt = ptr+num_weights
+
+                conv_weights = conv_weights.view_as(conv.weights.data)
+                conv.weights.data.copy_(conv_weights)
+
+
+
+
 
 
 
@@ -167,6 +238,7 @@ def create_modules(blocks):
         elif (x['type']=='upsample'):
             stride = int(x['stride'])
             upsample = nn.Upsample(scale_factor= 2,mode='bilinear')
+            #upsample = nn.functional.interpolate(input,scale_factor=2, mode='bilinear')
             module.add_module('upsamle_{0}'.format(index),upsample)
 
         #if its a route layer
@@ -216,8 +288,7 @@ def create_modules(blocks):
 
 def get_test_input(im):
     img = cv2.imread(im)
-    # cv2.imshow('test',img)
-    # cv2.waitKey(0)
+
     img = cv2.resize(img,(416,416))
     img = img[:,:,::-1].transpose((2,0,1))
     img = img[np.newaxis,:,:,:]/255.0
@@ -234,8 +305,12 @@ if __name__ == '__main__':
     imgfile = 'dog-cycle-car.png'
     img = get_test_input(imgfile)
     cuda = torch.cuda.is_available()
-    pred = model(img,cuda)
-    print (pred.size())
+    pred = model(img)
+    print(pred)
+    print('#'*20)
+
+
+
 
 
 
