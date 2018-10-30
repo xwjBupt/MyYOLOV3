@@ -74,8 +74,9 @@ def write_results(prediction,confidence,num_classes,nms_conf = 0.6):
     box_corner[:, :, 3] = (prediction[:, :, 1] + prediction[:, :, 3] / 2)
     prediction[:,:,:4] = box_corner[:,:,:4]
 
-    batch_size = prediction[0]
+    batch_size = prediction.size(0)
     write = 0
+
 
     for ind in range(batch_size):
         image_pre = prediction[ind]
@@ -115,7 +116,7 @@ def write_results(prediction,confidence,num_classes,nms_conf = 0.6):
                     break
 
                 #zero out all the detections that have IOU > threshhold
-                iou_mask = (ious<nms_conf).float.unsqueeze(1)
+                iou_mask = (ious<nms_conf).float().unsqueeze(1)
                 image_pred_class[i+1:] *= iou_mask
 
                 #remove the non-zero entries

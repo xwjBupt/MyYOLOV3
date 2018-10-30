@@ -132,7 +132,7 @@ class DarkNet(nn.Module):
 
                     #copy the data to model
                     bn.bias.data.copy_(bn_biases)
-                    bn.weights.data.copy_(bn_weights)
+                    bn.weight.data.copy_(bn_weights)
                     bn.running_mean.copy_(bn_running_mean)
                     bn.running_var.copy_(bn_running_var)
 
@@ -141,15 +141,15 @@ class DarkNet(nn.Module):
                     conv_biases = torch.Tensor(weights[ptr:ptr+num_bn_biases])
                     ptr += num_bn_biases
 
-                    conv_biases = conv_biases.view_as(conv.bias.dta)
-                    conv.bias.data.copy(conv_biases)
+                    conv_biases = conv_biases.view_as(conv.bias.data)
+                    conv.bias.data.copy_(conv_biases)
 
-                num_weights = conv.weights.numel()
+                num_weights = conv.weight.numel()
                 conv_weights = torch.Tensor(weights[ptr:ptr+num_weights])
-                prt = ptr+num_weights
+                ptr = ptr+num_weights
 
-                conv_weights = conv_weights.view_as(conv.weights.data)
-                conv.weights.data.copy_(conv_weights)
+                conv_weights = conv_weights.view_as(conv.weight.data)
+                conv.weight.data.copy_(conv_weights)
 
 
 
